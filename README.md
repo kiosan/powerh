@@ -52,14 +52,18 @@ node --version
 У тому ж терміналі:
 
 ```bash
-git clone <посилання_на_цей_репозиторій> powerh
+git clone https://github.com/kiosan/powerh.git
 cd powerh
 npm install
 ```
 
 Команда `npm install` встановить усі залежності — це займе 30–60 секунд. Можна йти заварити чай.
 
-> Якщо в тебе немає `git` — встанови його з [git-scm.com](https://git-scm.com/) (для Windows та Linux) або через Xcode Command Line Tools (для Mac: `xcode-select --install`).
+> **Чому HTTPS, а не SSH?** HTTPS (`https://github.com/...`) працює відразу, без жодних додаткових кроків. SSH (`git@github.com:...`) потребує реєстрації публічного ключа в GitHub — це окрема процедура для розробників. Якщо ти просто хочеш користуватися powerh — залишайся на HTTPS.
+
+> **Не маєш `git`?** Встанови з [git-scm.com](https://git-scm.com/) (для Windows та Linux) або через Xcode Command Line Tools (для Mac: `xcode-select --install`).
+
+> **Альтернатива без `git`:** на сторінці [github.com/kiosan/powerh](https://github.com/kiosan/powerh) натисни зелену кнопку **Code → Download ZIP**, розпакуй, відкрий теку в терміналі та запусти `npm install`. Але тоді ти не зможеш отримувати оновлення командою `git pull`.
 
 ### Крок 3: Запусти powerh
 

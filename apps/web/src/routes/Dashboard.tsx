@@ -21,14 +21,6 @@ interface Note {
   created_at: string;
 }
 
-interface Plan {
-  id: number;
-  horizon: string | null;
-  body_md: string;
-  status: string;
-  created_at: string;
-}
-
 function fmtDuration(s: number | null): string {
   if (s == null) return "—";
   const h = Math.floor(s / 3600);
@@ -52,37 +44,21 @@ const NOTE_KIND_LABELS: Record<string, string> = {
   digest: "тижневий огляд",
 };
 
-const PLAN_HORIZON_LABELS: Record<string, string> = {
-  session: "тренування",
-  week: "тиждень",
-  month: "місяць",
-  "race-block": "змагальний блок",
-};
-
-const PLAN_STATUS_LABELS: Record<string, string> = {
-  proposed: "запропоновано",
-  active: "активний",
-  archived: "архів",
-};
-
 export function Dashboard() {
   const [activities, setActivities] = useState<Activity[] | null>(null);
   const [notes, setNotes] = useState<Note[] | null>(null);
-  const [plans, setPlans] = useState<Plan[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = async () => {
     try {
-      const [a, n, p] = await Promise.all([
+      const [a, n] = await Promise.all([
         api<{ activities: Activity[] }>("/activities?limit=15"),
         api<{ notes: Note[] }>("/notes?limit=10"),
-        api<{ plans: Plan[] }>("/plans"),
       ]);
       setActivities(a.activities);
       setNotes(n.notes);
-      setPlans(p.plans);
     } catch (e) {
       setErr(String(e));
     }
@@ -111,18 +87,9 @@ export function Dashboard() {
     await api(`/notes/${id}`, { method: "DELETE" });
     await load();
   };
-  const setPlanStatus = async (id: number, status: string) => {
-    await api(`/plans/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
-    await load();
-  };
-  const deletePlan = async (id: number) => {
-    if (!confirm("Видалити цей план?")) return;
-    await api(`/plans/${id}`, { method: "DELETE" });
-    await load();
-  };
 
   if (err) return <div className="card">Помилка: {err}</div>;
-  if (!activities || !notes || !plans) return <div>Завантаження…</div>;
+  if (!activities || !notes) return <div>Завантаження…</div>;
 
   return (
     <div>
@@ -139,36 +106,6 @@ export function Dashboard() {
           </button>
           {msg && <span className="muted">{msg}</span>}
         </div>
-      </div>
-
-      <div className="card">
-        <h2 style={{ marginTop: 0 }}>Активні плани</h2>
-        {plans.filter((p) => p.status !== "archived").length === 0 && (
-          <p className="muted">Планів ще немає. Попросіть асистента ("сплануй наступний тиждень") — план збережеться сюди.</p>
-        )}
-        {plans.filter((p) => p.status !== "archived").map((p) => (
-          <div key={p.id} style={{ paddingTop: 8, borderTop: "1px solid var(--border)", marginTop: 8 }}>
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <div>
-                <strong>{PLAN_HORIZON_LABELS[p.horizon ?? ""] ?? p.horizon ?? "план"}</strong>{" "}
-                <span className={`badge ${p.status === "active" ? "ok" : "warn"}`}>
-                  {PLAN_STATUS_LABELS[p.status] ?? p.status}
-                </span>
-                <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>{p.created_at}</span>
-              </div>
-              <div className="row" style={{ gap: 4 }}>
-                {p.status !== "active" && <button onClick={() => setPlanStatus(p.id, "active")}>Активувати</button>}
-                {p.status === "active" && <button className="secondary" onClick={() => setPlanStatus(p.id, "archived")}>В архів</button>}
-                <button className="secondary" onClick={() => deletePlan(p.id)}>Видалити</button>
-              </div>
-            </div>
-            <div className="markdown" style={{
-              background: "var(--bg)", padding: 12, borderRadius: 6, marginTop: 8, lineHeight: 1.55,
-            }}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{p.body_md}</ReactMarkdown>
-            </div>
-          </div>
-        ))}
       </div>
 
       <div className="card">
