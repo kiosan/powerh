@@ -1,0 +1,23 @@
+node_modules
+dist
+build
+.env
+.env.local
+*.log
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Local user data — never commit
+data/*.sqlite
+data/*.sqlite-journal
+data/*.sqlite-wal
+data/*.sqlite-shm
+data/uploads/
+
+.DS_Store
+.vscode/
+.idea/
+
+# Claude Code per-machine permission cache
+.claude/settings.local.json

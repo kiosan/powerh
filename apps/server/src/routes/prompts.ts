@@ -1,0 +1,100 @@
+import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { PROMPTS, type PromptId, readPrompt, writePrompt, resetPrompt, interpolate } from "../agent/prompts.js";
+import { previewVariables } from "../agent/system-prompt.js";
+
+const ALLOWED_IDS = Object.keys(PROMPTS) as PromptId[];
+
+function isPromptId(id: string): id is PromptId {
+  return (ALLOWED_IDS as string[]).includes(id);
+}
+
+const writeSchema = z.object({
+  body: z.string().max(50_000),
+});
+
+export async function promptsRoutes(app: FastifyInstance) {
+  app.get("/api/prompts", async () => {
+    // List all prompts with their current state
+    return {
+      prompts: ALLOWED_IDS.map((id) => {
+        const meta = PROMPTS[id];
+        const { modified_at, isDefault } = readPrompt(id);
+        return {
+          id: meta.id,
+          title: meta.title,
+          description: meta.description,
+          filename: meta.filename,
+          variables: meta.variables,
+          notes: meta.notes,
+          modified_at,
+          is_default: isDefault,
+        };
+      }),
+    };
+  });
+
+  app.get<{ Params: { id: string } }>("/api/prompts/:id", async (req, reply) => {
+    if (!isPromptId(req.params.id)) {
+      reply.code(404);
+      return { error: "unknown prompt id" };
+    }
+    const meta = PROMPTS[req.params.id];
+    const { body, modified_at, isDefault } = readPrompt(req.params.id);
+    return {
+      id: meta.id,
+      title: meta.title,
+      description: meta.description,
+      filename: meta.filename,
+      variables: meta.variables,
+      notes: meta.notes,
+      body,
+      default_body: meta.defaultBody,
+      modified_at,
+      is_default: isDefault,
+    };
+  });
+
+  app.put<{ Params: { id: string }; Body: unknown }>("/api/prompts/:id", async (req, reply) => {
+    if (!isPromptId(req.params.id)) {
+      reply.code(404);
+      return { error: "unknown prompt id" };
+    }
+    const parsed = writeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: parsed.error.flatten() };
+    }
+    writePrompt(req.params.id, parsed.data.body);
+    const { body, modified_at, isDefault } = readPrompt(req.params.id);
+    return { ok: true, body, modified_at, is_default: isDefault };
+  });
+
+  app.post<{ Params: { id: string } }>("/api/prompts/:id/reset", async (req, reply) => {
+    if (!isPromptId(req.params.id)) {
+      reply.code(404);
+      return { error: "unknown prompt id" };
+    }
+    const body = resetPrompt(req.params.id);
+    return { ok: true, body, is_default: true };
+  });
+
+  // Returns the fully-resolved chat-system prompt with current variables
+  // substituted — for the "preview" pane in the editor.
+  app.post<{ Params: { id: string }; Body: { body?: string } }>(
+    "/api/prompts/:id/preview",
+    async (req, reply) => {
+      if (!isPromptId(req.params.id)) {
+        reply.code(404);
+        return { error: "unknown prompt id" };
+      }
+      // Allow previewing a draft body (without saving) — falls back to saved body
+      const draft = typeof req.body?.body === "string" ? req.body.body : readPrompt(req.params.id).body;
+      if (req.params.id === "chat-system") {
+        return { rendered: interpolate(draft, previewVariables()) };
+      }
+      // Other prompts have no variables
+      return { rendered: draft };
+    },
+  );
+}

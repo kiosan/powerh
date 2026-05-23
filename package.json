@@ -1,0 +1,26 @@
+{
+  "name": "powerh",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal fitness & health assistant — Strava + medical data + Claude agent. Local-first.",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "concurrently --names \"server,web\" --prefix-colors \"yellow,cyan\" --kill-others-on-fail \"npm:dev:server\" \"npm:dev:web\"",
+    "dev": "npm start",
+    "dev:server": "npm run dev -w @powerh/server",
+    "dev:web": "npm run dev -w @powerh/web",
+    "build": "npm run build --workspaces --if-present",
+    "prod": "npm run build && node apps/server/dist/index.js",
+    "migrate": "npm run migrate -w @powerh/server"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
