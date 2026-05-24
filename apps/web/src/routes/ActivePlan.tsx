@@ -29,8 +29,30 @@ function fmtDate(iso: string): string {
     .toLocaleString("uk-UA", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+type Tab = "active" | "proposed" | "archived";
+
+const TAB_LABELS: Record<Tab, string> = {
+  active: "Активний",
+  proposed: "Чернетки",
+  archived: "Архів",
+};
+
+const TAB_ICONS: Record<Tab, string> = {
+  active: "🟢",
+  proposed: "📝",
+  archived: "📦",
+};
+
+const EMPTY_TAB_MESSAGES: Record<Tab, string> = {
+  active:
+    'Немає активного плану. Попроси асистента в Чаті скласти план — наприклад "сплануй мені тиждень з акцентом на витривалість". Збережений план з\'явиться у вкладці Чернетки; звідти його можна активувати.',
+  proposed: "Немає чернеток. Плани з'являються тут, коли асистент пропонує їх — їх можна активувати, відредагувати або видалити.",
+  archived: "Архів порожній.",
+};
+
 export function ActivePlan() {
   const [plans, setPlans] = useState<Plan[] | null>(null);
+  const [tab, setTab] = useState<Tab>("active");
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
@@ -48,6 +70,11 @@ export function ActivePlan() {
   const setStatus = async (id: number, status: string) => {
     await api(`/plans/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
     await load();
+    // Helpful: when the user activates / archives a plan, jump to that tab so
+    // the plan they just acted on stays in view.
+    if (status === "active" || status === "proposed" || status === "archived") {
+      setTab(status as Tab);
+    }
   };
 
   const saveBody = async (id: number) => {
@@ -70,68 +97,77 @@ export function ActivePlan() {
 
   if (!plans) return <div>Завантаження…</div>;
 
-  const active = plans.filter((p) => p.status === "active");
-  const proposed = plans.filter((p) => p.status === "proposed");
-  const archived = plans.filter((p) => p.status === "archived");
+  const counts: Record<Tab, number> = {
+    active: plans.filter((p) => p.status === "active").length,
+    proposed: plans.filter((p) => p.status === "proposed").length,
+    archived: plans.filter((p) => p.status === "archived").length,
+  };
+
+  const visible = plans.filter((p) => p.status === tab);
 
   return (
     <div>
-      <h1>Активний план</h1>
+      <h1>Плани</h1>
 
-      {active.length === 0 && proposed.length === 0 && (
+      <div
+        role="tablist"
+        style={{
+          display: "flex",
+          gap: 4,
+          borderBottom: "1px solid var(--border)",
+          marginBottom: 16,
+        }}
+      >
+        {(Object.keys(TAB_LABELS) as Tab[]).map((t) => {
+          const isActive = t === tab;
+          return (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => { setTab(t); setEditing(null); }}
+              className="secondary"
+              style={{
+                background: "transparent",
+                border: "0",
+                borderBottom: isActive ? "2px solid var(--accent)" : "2px solid transparent",
+                borderRadius: 0,
+                color: isActive ? "var(--accent)" : "var(--fg)",
+                padding: "8px 14px",
+                fontWeight: isActive ? 600 : 400,
+                marginBottom: -1,
+              }}
+            >
+              {TAB_ICONS[t]} {TAB_LABELS[t]}
+              <span className="muted" style={{ marginLeft: 6, fontSize: 12, fontWeight: 400 }}>
+                {counts[t]}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {visible.length === 0 ? (
         <div className="card">
           <p className="muted" style={{ marginTop: 0 }}>
-            Поки немає планів. Попроси асистента в <a href="/chat" style={{ color: "var(--accent)" }}>Чаті</a> скласти тобі тренувальний план — наприклад: "Сплануй мені тиждень з акцентом на витривалість". Збережені плани з'являться тут.
+            {EMPTY_TAB_MESSAGES[tab]}
           </p>
         </div>
-      )}
-
-      {active.length > 0 && (
-        <>
-          <h2 style={{ marginTop: 20 }}>🟢 Активні</h2>
-          {active.map((p) => (
-            <PlanCard key={p.id} plan={p} editing={editing === p.id} draft={draft}
-              setDraft={setDraft}
-              startEdit={() => { setEditing(p.id); setDraft(p.body_md); }}
-              cancelEdit={() => setEditing(null)}
-              saveEdit={() => saveBody(p.id)}
-              setStatus={(s) => setStatus(p.id, s)}
-              onDelete={() => deletePlan(p.id)}
-            />
-          ))}
-        </>
-      )}
-
-      {proposed.length > 0 && (
-        <>
-          <h2 style={{ marginTop: 24 }}>📝 Запропоновані</h2>
-          {proposed.map((p) => (
-            <PlanCard key={p.id} plan={p} editing={editing === p.id} draft={draft}
-              setDraft={setDraft}
-              startEdit={() => { setEditing(p.id); setDraft(p.body_md); }}
-              cancelEdit={() => setEditing(null)}
-              saveEdit={() => saveBody(p.id)}
-              setStatus={(s) => setStatus(p.id, s)}
-              onDelete={() => deletePlan(p.id)}
-            />
-          ))}
-        </>
-      )}
-
-      {archived.length > 0 && (
-        <>
-          <h2 style={{ marginTop: 24 }}>📦 В архіві</h2>
-          {archived.map((p) => (
-            <PlanCard key={p.id} plan={p} editing={editing === p.id} draft={draft}
-              setDraft={setDraft}
-              startEdit={() => { setEditing(p.id); setDraft(p.body_md); }}
-              cancelEdit={() => setEditing(null)}
-              saveEdit={() => saveBody(p.id)}
-              setStatus={(s) => setStatus(p.id, s)}
-              onDelete={() => deletePlan(p.id)}
-            />
-          ))}
-        </>
+      ) : (
+        visible.map((p) => (
+          <PlanCard
+            key={p.id}
+            plan={p}
+            editing={editing === p.id}
+            draft={draft}
+            setDraft={setDraft}
+            startEdit={() => { setEditing(p.id); setDraft(p.body_md); }}
+            cancelEdit={() => setEditing(null)}
+            saveEdit={() => saveBody(p.id)}
+            setStatus={(s) => setStatus(p.id, s)}
+            onDelete={() => deletePlan(p.id)}
+          />
+        ))
       )}
 
       {msg && <p className="muted" style={{ marginTop: 12 }}>{msg}</p>}

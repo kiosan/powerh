@@ -17,7 +17,7 @@ function Layout({ children }: { children: React.ReactNode }) {
         <div className="brand">powerh</div>
         <NavLink to="/chat">Чат</NavLink>
         <NavLink to="/dashboard">Огляд</NavLink>
-        <NavLink to="/plan">Активний план</NavLink>
+        <NavLink to="/plan">Плани</NavLink>
         <NavLink to="/sources">Джерела</NavLink>
         <NavLink to="/medical">Медичні дані</NavLink>
         <NavLink to="/prompts">Промпти</NavLink>
