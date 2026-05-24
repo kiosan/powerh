@@ -19,13 +19,27 @@ function webAppOrigin(): string {
   return "http://localhost:5173";
 }
 
+/** HTML-escape any value that gets interpolated into the callback page.
+ * The OAuth callback receives ?error=… and ?state=… from the network; these
+ * cannot be assumed safe. The token-exchange catch block also injects an
+ * error message string. Without escaping, an attacker who lures the user
+ * to a crafted callback URL gets reflected XSS on the API origin. */
+function esc(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;",
+  );
+}
+
 function htmlPage(opts: { title: string; body: string; redirectTo?: string; code: number }): { html: string; code: number } {
+  // redirectTo is a server-controlled string built from env.port — JSON-encoding
+  // is sufficient. title/body come from string literals at call sites; we still
+  // escape title defensively for the <title> tag.
   const redirectScript = opts.redirectTo
     ? `<script>setTimeout(()=>{window.location.href=${JSON.stringify(opts.redirectTo)}},800)</script>`
     : "";
   return {
     code: opts.code,
-    html: `<!doctype html><html><head><title>${opts.title}</title></head><body style="font-family:system-ui;padding:24px;background:#0e1116;color:#e6edf3"><h2>${opts.title}</h2>${opts.body}${redirectScript}</body></html>`,
+    html: `<!doctype html><html><head><title>${esc(opts.title)}</title><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"></head><body style="font-family:system-ui;padding:24px;background:#0e1116;color:#e6edf3"><h2>${esc(opts.title)}</h2>${opts.body}${redirectScript}</body></html>`,
   };
 }
 
@@ -64,7 +78,7 @@ export async function stravaRoutes(app: FastifyInstance) {
       if (error) {
         const page = htmlPage({
           title: "Помилка під'єднання Strava",
-          body: `<p>${error}</p><p><a href="${sourcesUrl}" style="color:#f97316">Назад до Джерел</a></p>`,
+          body: `<p>${esc(error)}</p><p><a href="${esc(sourcesUrl)}" style="color:#f97316">Назад до Джерел</a></p>`,
           code: 400,
         });
         reply.code(page.code).type("text/html");
@@ -73,7 +87,7 @@ export async function stravaRoutes(app: FastifyInstance) {
       if (!code || !state || !consumeState(state)) {
         const page = htmlPage({
           title: "Невалідний зворотний виклик",
-          body: `<p>Відсутній або застарілий стан. Спробуйте під'єднатися ще раз.</p><p><a href="${sourcesUrl}" style="color:#f97316">Назад до Джерел</a></p>`,
+          body: `<p>Відсутній або застарілий стан. Спробуйте під'єднатися ще раз.</p><p><a href="${esc(sourcesUrl)}" style="color:#f97316">Назад до Джерел</a></p>`,
           code: 400,
         });
         reply.code(page.code).type("text/html");
@@ -94,7 +108,7 @@ export async function stravaRoutes(app: FastifyInstance) {
         const msg = e instanceof Error ? e.message : String(e);
         const page = htmlPage({
           title: "Помилка обміну токенів",
-          body: `<pre style="white-space:pre-wrap;background:#161b22;padding:12px;border-radius:6px">${msg}</pre><p><a href="${sourcesUrl}" style="color:#f97316">Назад до Джерел</a></p>`,
+          body: `<pre style="white-space:pre-wrap;background:#161b22;padding:12px;border-radius:6px">${esc(msg)}</pre><p><a href="${esc(sourcesUrl)}" style="color:#f97316">Назад до Джерел</a></p>`,
           code: 500,
         });
         reply.code(page.code).type("text/html");

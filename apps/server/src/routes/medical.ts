@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import multipart from "@fastify/multipart";
 import { randomUUID } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { writeFile, chmod } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { env } from "../config/env.js";
 import { createDocument, applyExtraction, listDocuments, getDocumentWithResults, updateLabResult, deleteDocument, markerSummaries } from "../db/medical.js";
@@ -41,20 +41,37 @@ export async function medicalRoutes(app: FastifyInstance) {
       reply.code(400);
       return { error: "no file uploaded" };
     }
-    const safeName = basename(file.filename || "upload.pdf");
-    if (!/\.pdf$/i.test(safeName)) {
+    // basename strips any path components, then sanitize the remainder to
+    // alphanumerics + dot/dash/underscore — keeps the filename readable
+    // for the UI while neutralizing newlines, shell metacharacters, etc.
+    const rawName = basename(file.filename || "upload.pdf");
+    const cleanName = rawName.replace(/[^\w.\-]+/g, "_").slice(0, 120) || "upload.pdf";
+    if (!/\.pdf$/i.test(cleanName)) {
       reply.code(400);
       return { error: "only PDF files supported in v1" };
     }
-    const storedName = `${Date.now()}-${randomUUID()}-${safeName}`;
-    const fullPath = join(env.uploadsDir, storedName);
     const buf = await file.toBuffer();
-    await writeFile(fullPath, buf);
+    // Magic-byte check: real PDFs start with "%PDF-". This catches a file
+    // that's just a renamed .docx, an HTML page, or random garbage —
+    // none of which Claude can do anything useful with, and which would
+    // otherwise burn API tokens before failing.
+    if (buf.length < 5 || buf.subarray(0, 5).toString("ascii") !== "%PDF-") {
+      reply.code(400);
+      return { error: "Файл не схожий на PDF (відсутній підпис %PDF-)." };
+    }
+    const storedName = `${Date.now()}-${randomUUID()}-${cleanName}`;
+    const fullPath = join(env.uploadsDir, storedName);
+    await writeFile(fullPath, buf, { mode: 0o600 });
+    try {
+      await chmod(fullPath, 0o600);
+    } catch {
+      // Best effort on platforms where chmod is a no-op.
+    }
 
-    const doc = createDocument(safeName, fullPath);
+    const doc = createDocument(cleanName, fullPath);
 
     try {
-      const extracted = await extractLabResults(fullPath, safeName);
+      const extracted = await extractLabResults(fullPath, cleanName);
       const { inserted } = applyExtraction(doc.id, extracted);
       const full = getDocumentWithResults(doc.id);
       return { documentId: doc.id, inserted, document: full.document, results: full.results };

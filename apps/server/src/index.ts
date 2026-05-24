@@ -19,9 +19,43 @@ async function main() {
     logger: { level: env.nodeEnv === "production" ? "info" : "debug" },
   });
 
+  // Origin allowlist: the API only accepts cross-origin requests from the
+  // local Vite dev server (port 5173) and from itself. Other origins are
+  // rejected — important because the server has no auth and any browsing
+  // session reaching it can read all data.
+  const allowedOrigins = new Set([
+    `http://localhost:5173`,
+    `http://127.0.0.1:5173`,
+    `http://localhost:${env.port}`,
+    `http://127.0.0.1:${env.port}`,
+  ]);
+
   await app.register(cors, {
-    origin: env.nodeEnv === "production" ? false : true,
+    origin(origin, cb) {
+      // No Origin header → same-origin browser request, curl, or server-side
+      // call. Allow.
+      if (!origin) return cb(null, true);
+      cb(null, allowedOrigins.has(origin));
+    },
     credentials: true,
+  });
+
+  // Host header allowlist: defends against DNS rebinding. A malicious site
+  // can point its DNS at 127.0.0.1, which makes the browser see the request
+  // as same-origin (bypassing CORS) — but the Host header in the request
+  // will be the attacker's domain. By rejecting unexpected Host values, we
+  // close that door.
+  const allowedHosts = new Set([
+    `localhost:${env.port}`,
+    `127.0.0.1:${env.port}`,
+    `localhost`,
+    `127.0.0.1`,
+  ]);
+  app.addHook("onRequest", async (req, reply) => {
+    const host = (req.headers.host ?? "").toLowerCase();
+    if (!allowedHosts.has(host)) {
+      reply.code(403).send({ error: "forbidden host" });
+    }
   });
 
   await app.register(healthRoutes);

@@ -9,6 +9,16 @@ function isPromptId(id: string): id is PromptId {
   return (ALLOWED_IDS as string[]).includes(id);
 }
 
+// Per-prompt size cap. The chat-system prompt is sent on every chat turn
+// (and on every tool-use iteration within a turn), so a generous cap
+// inflates Anthropic input-token cost. The other two prompts run once
+// per event so they can be longer.
+const MAX_BODY_SIZE: Record<string, number> = {
+  "chat-system": 12_000,
+  "weekly-digest": 20_000,
+  "lab-extraction": 20_000,
+};
+
 const writeSchema = z.object({
   body: z.string().max(50_000),
 });
@@ -64,6 +74,13 @@ export async function promptsRoutes(app: FastifyInstance) {
     if (!parsed.success) {
       reply.code(400);
       return { error: parsed.error.flatten() };
+    }
+    const maxSize = MAX_BODY_SIZE[req.params.id] ?? 20_000;
+    if (parsed.data.body.length > maxSize) {
+      reply.code(400);
+      return {
+        error: `Цей промпт обмежено ${maxSize.toLocaleString()} символами (${parsed.data.body.length.toLocaleString()} надано). Системна інструкція чату надсилається на кожне повідомлення, тож тримай її стислою.`,
+      };
     }
     writePrompt(req.params.id, parsed.data.body);
     const { body, modified_at, isDefault } = readPrompt(req.params.id);

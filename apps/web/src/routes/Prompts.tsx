@@ -250,7 +250,12 @@ export function Prompts() {
             spellCheck={false}
           />
           <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-            Символів: {draft.length.toLocaleString()} / 50,000
+            Символів: {draft.length.toLocaleString()} / {(selected.id === "chat-system" ? 12_000 : 20_000).toLocaleString()}
+            {selected.id === "chat-system" && (
+              <span style={{ marginLeft: 8 }}>
+                — системна інструкція надсилається на кожне повідомлення, тож тримай її стислою.
+              </span>
+            )}
           </div>
 
           <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: "wrap" }}>
